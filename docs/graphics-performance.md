@@ -40,7 +40,7 @@ CrossOver → select the **Arknights Endfield** bottle → **Advanced Settings �
 - **DXMT** — good for DirectX 11 titles; also supports the DLSS/MetalFX toggle.
 - **DXVK** — DirectX 10/11 → Vulkan → MoltenVK (fallback; extra hop, no DLSS).
 
-Also enable **DLSS (MetalFX)** and **MSync** — or let [`scripts/create-bottle.sh`](../scripts/create-bottle.sh) set the backend and both toggles (the `cxbottle.conf` keys are listed in [06-graphics-and-gptk.md → Selecting a backend](06-graphics-and-gptk.md#selecting-a-backend-in-crossover-26)). AVX2 (from Rosetta 2 on macOS 15+, not from GPTK) needs no setting: CrossOver's `wine` wrapper already exports `ROSETTA_ADVERTISE_AVX=1`.
+Enable **MSync**. Enable **DLSS (MetalFX)** only for the D3DMetal backend; with DXMT, leave NVIDIA DLSS disabled and use the in-game **TAAU** or AMD FSR3 upscaler instead. [`scripts/create-bottle.sh`](../scripts/create-bottle.sh) can set the backend and backend-specific toggle (the `cxbottle.conf` keys are listed in [06-graphics-and-gptk.md → Selecting a backend](06-graphics-and-gptk.md#selecting-a-backend-in-crossover-26)). AVX2 (from Rosetta 2 on macOS 15+, not from GPTK) needs no setting: CrossOver's `wine` wrapper already exports `ROSETTA_ADVERTISE_AVX=1`.
 
 ## Installing GPTK4 (optional)
 
