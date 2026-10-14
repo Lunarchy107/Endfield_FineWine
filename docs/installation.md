@@ -99,7 +99,7 @@ Prefer a GUI? The [FineWine Patcher.app](../patcher-app/README.md) does the same
 
 Then install the Gryphline launcher into it: download the Windows launcher from [endfield.gryphline.com](https://endfield.gryphline.com), use CrossOver → **Arknights Endfield** → *Install Application into Bottle* (or `/Applications/CrossOver_Endfield_Patch.app/Contents/SharedSupport/CrossOver/bin/wine --bottle "Arknights Endfield" --wait-children ~/Downloads/GRYPHLINK_<version>.exe`), keep the default install location, log in, and let the launcher download the game.
 
-Prefer the GUI for the bottle too? Create a *Windows 11 64-bit* bottle named `Arknights Endfield` and set Graphics → D3DMetal, DLSS → on, MSync → on. `UPDATE=1 ./scripts/create-bottle.sh` re-applies the settings to an existing bottle.
+Prefer the GUI for the bottle too? Create a *Windows 11 64-bit* bottle named `Arknights Endfield` and set Graphics → D3DMetal, DLSS → on, MSync → on. `UPDATE=1 ./scripts/create-bottle.sh` re-applies the settings to an existing bottle. If the launcher crashes under Rosetta with leftover Wine processes, use `MSYNC=0 BACKEND=d3dmetal UPDATE=1 ./scripts/create-bottle.sh` to disable MSync for that bottle.
 
 ## 5. Run the game
 

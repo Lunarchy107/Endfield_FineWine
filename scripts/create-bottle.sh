@@ -3,8 +3,8 @@
 # this project's working setup uses it (or re-apply that configuration to an existing bottle).
 #
 # GUI equivalent: CrossOver → New bottle (Windows 11 64-bit), then the bottle's Advanced Settings:
-# Graphics = D3DMetal, DLSS = on, MSync = on. (Leave High Resolution Mode off — the game renders a
-# white screen with it.)
+# Graphics = D3DMetal, DLSS = on, MSync = on by default. (Leave High Resolution Mode off — the game
+# renders a white screen with it.) Set MSYNC=0 when the launcher crashes under Rosetta.
 #
 # Usage:
 #   scripts/create-bottle.sh            # create the bottle (an existing bottle is left untouched)
@@ -13,6 +13,7 @@
 # Env:
 #   BOTTLE   (default "Arknights Endfield" — the name the other scripts expect)
 #   BACKEND  (default d3dmetal; one of d3dmetal | dxmt | dxvk | wined3d)
+#   MSYNC    (default 1; set 0 for the D3DMetal/Rosetta launcher-crash workaround)
 #   APP      (CrossOver app whose tools to use; default: the patched copy, else /Applications/CrossOver.app)
 #
 # The settings are [EnvironmentVariables] keys in the bottle's cxbottle.conf — the same keys the
@@ -28,6 +29,7 @@
 set -uo pipefail
 BOTTLE="${BOTTLE:-Arknights Endfield}"
 BACKEND="${BACKEND:-d3dmetal}"
+MSYNC="${MSYNC:-1}"
 APP="${APP:-}"
 if [ -z "$APP" ]; then
   for c in "/Applications/CrossOver_Endfield_Patch.app" \
@@ -42,11 +44,15 @@ case "$BACKEND" in
   d3dmetal|dxmt|dxvk|wined3d) ;;
   *) echo "ERROR: BACKEND must be d3dmetal, dxmt, dxvk or wined3d (got '$BACKEND')" >&2; exit 1 ;;
 esac
+case "$MSYNC" in
+  0|1) ;;
+  *) echo "ERROR: MSYNC must be 0 or 1 (got '$MSYNC')" >&2; exit 1 ;;
+esac
 BP="$HOME/Library/Application Support/CrossOver/Bottles/$BOTTLE"
 CONF="$BP/cxbottle.conf"
 
 # key/value pairs to apply
-SETTINGS=(CX_GRAPHICS_BACKEND "$BACKEND" WINEMSYNC 1)
+SETTINGS=(CX_GRAPHICS_BACKEND "$BACKEND" WINEMSYNC "$MSYNC")
 case "$BACKEND" in
   d3dmetal) SETTINGS+=(D3DM_ENABLE_METALFX 1) ;;
   dxmt)     SETTINGS+=(DXMT_ENABLE_NVEXT 1) ;;
