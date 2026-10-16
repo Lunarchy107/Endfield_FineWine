@@ -69,6 +69,7 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/licenses" \
          "$APP/Contents/Resources/payload/x86_64-unix" \
          "$APP/Contents/Resources/payload/x86_64-windows" \
+         "$APP/Contents/Resources/payload/server" \
          "$APP/Contents/Resources/payload/lib64"
 cp "$BIN" "$APP/Contents/MacOS/$EXE"
 cp "$HERE/Resources/licenses/"*.txt "$APP/Contents/Resources/licenses/"
@@ -135,12 +136,13 @@ KERNEL32="$(find_module kernel32.dll dlls/kernel32/x86_64-windows/kernel32.dll)"
 NTOSKRNL="$(find_module ntoskrnl.exe dlls/ntoskrnl.exe/x86_64-windows/ntoskrnl.exe)"
 LSASS="$(find_module lsass.exe programs/lsass/x86_64-windows/lsass.exe)"
 WINEBOOT="$(find_module wineboot.exe programs/wineboot/x86_64-windows/wineboot.exe)"
+WINESERVER="$(find_module wineserver server/wineserver)"
 # MoltenVK is built by build-moltenvk.sh into its own tree; also accept a copy beside the modules.
 if   [ -f "$PAYLOAD_DIR/libMoltenVK.dylib" ]; then MVK="$PAYLOAD_DIR/libMoltenVK.dylib"
 elif [ -f "$MOLTENVK_DIR/libMoltenVK.dylib" ]; then MVK="$MOLTENVK_DIR/libMoltenVK.dylib"
 else MVK=""; fi
 
-if [ -z "$NTDLL" ] || [ -z "$KERNEL32" ] || [ -z "$NTOSKRNL" ] || [ -z "$LSASS" ] || [ -z "$WINEBOOT" ] || [ -z "$MVK" ]; then
+if [ -z "$NTDLL" ] || [ -z "$KERNEL32" ] || [ -z "$NTOSKRNL" ] || [ -z "$LSASS" ] || [ -z "$WINEBOOT" ] || [ -z "$WINESERVER" ] || [ -z "$MVK" ]; then
   if [ "${ALLOW_MISSING_PAYLOAD:-0}" = "1" ]; then
     warn "payload modules not found — building WITHOUT payload (smoke test only)"
   else
@@ -156,6 +158,7 @@ else
   cp "$NTOSKRNL" "$P/x86_64-windows/ntoskrnl.exe"
   cp "$LSASS"    "$P/x86_64-windows/lsass.exe"
   cp "$WINEBOOT" "$P/x86_64-windows/wineboot.exe"
+  cp "$WINESERVER" "$P/server/wineserver"
   cp "$MVK"      "$P/lib64/libMoltenVK.dylib"
 
   # Pre-add the lib64 rpath to ntdll.so HERE, at app-build time, so end users of the
@@ -182,10 +185,10 @@ else
 
   for f in "$P/x86_64-unix/ntdll.so" "$P/x86_64-windows/kernel32.dll" \
            "$P/x86_64-windows/ntoskrnl.exe" "$P/x86_64-windows/lsass.exe" \
-           "$P/x86_64-windows/wineboot.exe" "$P/lib64/libMoltenVK.dylib"; do
+           "$P/x86_64-windows/wineboot.exe" "$P/server/wineserver" "$P/lib64/libMoltenVK.dylib"; do
     codesign --force --sign "$CODESIGN_ID" "$f" 2>/dev/null || true
   done
-  ok "payload staged: ntdll.so, kernel32.dll, ntoskrnl.exe, lsass.exe, wineboot.exe, libMoltenVK.dylib"
+  ok "payload staged: ntdll.so, kernel32.dll, ntoskrnl.exe, lsass.exe, wineboot.exe, wineserver, libMoltenVK.dylib"
 fi
 
 # ---------------------------------------------------------------- 4. sign

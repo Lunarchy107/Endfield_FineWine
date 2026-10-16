@@ -39,6 +39,15 @@ enum Payload {
         // Patched wineboot.exe starts the lsass.exe stub at boot.
         PayloadModule(payloadSubpath: "x86_64-windows/wineboot.exe",
                       crossoverSubpath: "lib/wine/x86_64-windows/wineboot.exe"),
+        // wineserver: its server-side protocol version must match the swapped ntdll.so's client
+        // version. Stock CrossOver ships an older wineserver, so leaving it in place makes every
+        // wine process die with "wine client error:0: version mismatch …" before any window shows.
+        // CrossOver installs the same binary at two paths; both must be replaced. This is also the
+        // module that carries the ACE-CORE token-object fix (see docs/14-ace-core-regression.md).
+        PayloadModule(payloadSubpath: "server/wineserver",
+                      crossoverSubpath: "bin/wineserver"),
+        PayloadModule(payloadSubpath: "server/wineserver",
+                      crossoverSubpath: "CrossOver-Hosted Application/wineserver"),
         // Patched MoltenVK (Vulkan/DXVK/vkd3d paths; replaces CrossOver's bundled copy).
         // Built by scripts/build-moltenvk.sh and baked into the payload by build-app.sh.
         PayloadModule(payloadSubpath: "lib64/libMoltenVK.dylib",
@@ -577,10 +586,10 @@ final class PatcherEngine: ObservableObject {
                 throw PatchError("\(module.crossoverSubpath) not found in the copied app — is this really CrossOver \(CrossOverInfo.expectedVersion)?")
             }
             try fm.copyItem(at: src, to: dst)
-            // Only the Mach-O modules (ntdll.so, libMoltenVK.dylib) need a signature of their
-            // own to load on Apple Silicon. The PE modules are covered by the bundle seal, as in
-            // stock CrossOver.
-            if dst.pathExtension == "so" || dst.pathExtension == "dylib" {
+            // Only the Mach-O modules (ntdll.so, libMoltenVK.dylib, wineserver) need a signature
+            // of their own to load on Apple Silicon. The PE modules are covered by the bundle
+            // seal, as in stock CrossOver.
+            if requiresOwnSignature(dst) {
                 try run("/usr/bin/codesign", ["--force", "--sign", "-", dst.path])
             }
         }
@@ -712,15 +721,23 @@ final class PatcherEngine: ObservableObject {
         return Data(SHA256.hash(data: data))
     }
 
+    /// Mach-O payload modules that need a signature of their own to load on Apple Silicon.
+    /// `wineserver` has no extension but is a signed Mach-O executable like the `.so`/`.dylib`
+    /// libraries, so it must be treated the same when signing and when stripping for comparison.
+    private nonisolated static func requiresOwnSignature(_ url: URL) -> Bool {
+        let ext = url.pathExtension
+        return ext == "so" || ext == "dylib" || url.lastPathComponent == "wineserver"
+    }
+
     /// Content hash of a module with any embedded code signature removed. The Mach-O modules
-    /// (ntdll.so, libMoltenVK.dylib) are ad-hoc re-signed after the swap; because codesign's
-    /// ad-hoc signature bytes differ across macOS/codesign versions, comparing the signed file
-    /// directly would report a false mismatch. Stripping the signature makes the comparison
-    /// depend only on the actual code. PE modules carry no embedded signature and are hashed
-    /// as-is. Falls back to a plain hash if the signature can't be removed.
+    /// (ntdll.so, libMoltenVK.dylib, wineserver) are ad-hoc re-signed after the swap; because
+    /// codesign's ad-hoc signature bytes differ across macOS/codesign versions, comparing the
+    /// signed file directly would report a false mismatch. Stripping the signature makes the
+    /// comparison depend only on the actual code. PE modules carry no embedded signature and are
+    /// hashed as-is. Falls back to a plain hash if the signature can't be removed.
     private nonisolated static func contentHash(_ url: URL) -> Data? {
         guard let raw = try? Data(contentsOf: url, options: .alwaysMapped) else { return nil }
-        guard url.pathExtension == "so" || url.pathExtension == "dylib" else {
+        guard requiresOwnSignature(url) else {
             return Data(SHA256.hash(data: raw))
         }
         let fm = FileManager.default
