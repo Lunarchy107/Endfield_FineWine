@@ -32,17 +32,12 @@ A CrossOver-built `ntdll.so` refuses to talk to a protocol-931 wineserver, and t
 # Build every port as x86_64 (per Gcenx/macports-wine; do this before installing any port)
 echo "build_arch x86_64" | sudo tee -a /opt/local/etc/macports/macports.conf
 
-# Gcenx's overlay of Wine-oriented ports; it must come before the default source
-sudo git clone https://github.com/Gcenx/macports-wine.git /opt/macports-wine
-sudo sed -i '' 's|^rsync://rsync.macports.org/macports/release/tarballs/ports.tar.gz \[default\]|file:///opt/macports-wine\
-&|' /opt/local/etc/macports/sources.conf
-sudo port -v sync
-cd /opt/macports-wine && sudo portindex
-
-sudo port install bison flex gettext pkgconfig MoltenVK-latest \
+sudo port install bison flex gettext pkgconfig \
                   x86_64-w64-mingw32-gcc i686-w64-mingw32-gcc \
                   gnutls freetype libsdl2 vulkan-loader libpcap
 ```
+
+These are exactly the ports `build-wine.sh` checks for; all come from MacPorts' default source. MacPorts often has no prebuilt x86_64 packages for a recent macOS, so expect much of this to compile from source, the two GCC cross compilers especially (allow a few hours). At runtime the engine uses the wrapper's own MoltenVK and libraries, not these.
 
 ## 2. Build and package
 
