@@ -1,0 +1,44 @@
+diff --git a/dlls/ntdll/unix/loader.c b/dlls/ntdll/unix/loader.c
+index 5452ecc..8f67ecd 100644
+--- a/dlls/ntdll/unix/loader.c
++++ b/dlls/ntdll/unix/loader.c
+@@ -384,6 +384,30 @@ void prepend_dll_path(const char *path)
+         dll_path_maxlen = path_len;
+ }
+ 
++/* Endfield_FineWine: Sikarugir's launcher selects a renderer (DXMT, DXVK, D3DMetal, ...) by
++   pointing these variables at its DLL folder; Sikarugir's own engines search them before the
++   builtin DLLs. CrossOver does the same through cxcompatdb, which is not part of a Sikarugir
++   engine. WINEDLLPATH_PREPEND (used by Gcenx's CrossOver-based engines) is handled by
++   patches/highball/0003, which the engine build applies. */
++static void prepend_env_dll_paths(void)
++{
++    static const char * const vars[] = { "WINEDLLPATH_CNCD", "WINEDLLPATH_D9VK", "WINEDLLPATH_DXVK",
++                                         "WINEDLLPATH_D3DMETAL", "WINEDLLPATH_DXMT" };
++    char *copy, *p, *dirs[32];
++    const char *value;
++    unsigned int i, n;
++
++    for (i = 0; i < ARRAY_SIZE(vars); i++)
++    {
++        if (!(value = getenv( vars[i] )) || !*value) continue;
++        copy = strdup( value );
++        for (n = 0, p = strtok( copy, ":" ); p && n < ARRAY_SIZE(dirs); p = strtok( NULL, ":" ))
++            dirs[n++] = strdup( p );
++        while (n--) prepend_dll_path( dirs[n] );  /* keeps each variable's own order */
++        free( copy );
++    }
++}
++
+ static void set_dll_path(void)
+ {
+     char *p, *path = getenv( "WINEDLLPATH" );
+@@ -405,6 +429,8 @@ static void set_dll_path(void)
+ 
+     for (i = 0; i < count; i++) dll_path_maxlen = max( dll_path_maxlen, strlen(dll_paths[i]) );
+     dll_paths[count] = NULL;
++
++    prepend_env_dll_paths();
+ }
+ 
+ 

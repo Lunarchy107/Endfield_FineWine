@@ -6,7 +6,8 @@ Helper scripts for the capture → build → swap → test loop.
 |---|---|---|---|
 | `01-capture-failure.sh` | diagnose | Launch Endfield via CrossOver with `CX_LOG` + `--wait-children`, collect logs + crash reports, auto-classify the failure (now recognizes the stage-1 protector loop). | ✅ working |
 | `fetch-dwproton-patches.sh` | 2 | Pull the Endfield-relevant dw-proton patch set into `../patches/stage2-dwproton/`. | ✅ working |
-| `build-wine.sh` | build | Build a **64-bit-only** CrossOver 26.3 Wine from source (standard toolchain, no `win32on64`/`cx-llvm`). `deps\|fetch\|apply\|configure\|build\|all`. | ✅ working |
+| `build-wine.sh` | build | Build a **64-bit-only** CrossOver 26.3 Wine from source (standard toolchain, no `win32on64`/`cx-llvm`). `deps\|fetch\|apply\|configure\|build\|all`. `engine\|engine-apply\|engine-configure\|engine-build` build the full i386+x86_64 tree on Highball's patch series (`patches/highball/`) plus the Sikarugir-only fixes (`patches/sikarugir/`), against an x86_64 MacPorts with mingw-w64 GCC ([../docs/sikarugir.md](../docs/sikarugir.md)). | ✅ working |
+| `package-sikarugir-engine.sh` | package | Package the `engine` build as a Sikarugir engine (`dist/WS12WineFineWine26.3.0_1.tar.xz`); `INSTALL=1` copies it into Sikarugir's Engines folder. | 🧪 experimental |
 | `build-moltenvk.sh` | build | Build a patched x86_64 **MoltenVK** (`libMoltenVK.dylib`) from source into `build/moltenvk-out`. `fetch\|apply\|deps\|build\|all`. | ✅ working |
 | `package.sh` | package | Bundle `build/wine-out` + `build/moltenvk-out` into `dist/endfield-wine-modules` (+ tarball/checksums) for `apply-modules.sh` and the Patcher app. | ✅ working |
 | `apply-modules.sh` | install | Install the packaged Wine modules **and** MoltenVK into a copy of CrossOver (`CrossOver_Endfield_Patch.app`). | ✅ working |

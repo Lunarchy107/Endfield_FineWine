@@ -98,6 +98,7 @@ Curious about how this works under the hood without cluttering up the setup guid
 - **[CodeWeavers CrossOver](https://www.codeweavers.com/crossover)** and the **[Wine](https://www.winehq.org/)** project — the foundation this builds on.
 - **[Apple Game Porting Toolkit](https://developer.apple.com/games/game-porting-toolkit/)** — D3DMetal.
 - **[Khronos Group MoltenVK](https://github.com/KhronosGroup/MoltenVK)** — the Vulkan-on-Metal layer (Apache-2.0); bundled patched in the patcher app.
+- **[Highball](https://github.com/gauthierpiarrette/highball-engine)** — the CrossOver 26.3 patch series (`patches/highball/`, LGPL-2.1) the Sikarugir engine is built on, including the `winemac` cross-process swapchain that lets Steam's UI render ([docs/sikarugir.md](docs/sikarugir.md)).
 - **WineHQ Bug 45083** reporters — the prior art that framed the Rosetta VMProtect problem.
 
 ## Contributing / upstreaming

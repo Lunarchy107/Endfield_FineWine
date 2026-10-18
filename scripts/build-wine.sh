@@ -21,7 +21,16 @@
 #   scripts/build-wine.sh build     # make -j
 #   scripts/build-wine.sh all       # deps -> fetch -> apply -> configure -> build
 #
-# Env: CX_VER (default 26.3.0), BUILD_DIR (default ./build), JOBS (default: all cores)
+# Full engine (a complete i386+x86_64 Wine for Sikarugir, packaged by package-sikarugir-engine.sh).
+# Needs an x86_64 MacPorts in /opt/local (build_arch x86_64) plus the Gcenx/macports-wine overlay;
+# see docs/sikarugir.md for the port list.
+#   scripts/build-wine.sh engine-configure  # ./configure the full tree against MacPorts + mingw-w64 GCC
+#   scripts/build-wine.sh engine-build      # make -j, then install into build/wine-engine-root
+#   scripts/build-wine.sh engine-apply      # patches/highball/, then the patches 'apply' uses, then patches/sikarugir/
+#   scripts/build-wine.sh engine            # fetch -> engine-apply -> engine-configure -> engine-build
+#
+# Env: CX_VER (default 26.3.0), BUILD_DIR (default ./build), JOBS (default: all cores),
+#      MACPORTS (default /opt/local)
 
 set -uo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
@@ -33,8 +42,12 @@ WINE_SRC="$BUILD_DIR/wine-src"          # extracted sources/wine
 WINE_BUILD="$BUILD_DIR/wine-build64"    # out-of-tree 64-bit build
 WINE_OUT="$BUILD_DIR/wine-out"
 MODULES="dlls/ntdll/ntdll.so dlls/kernel32/x86_64-windows/kernel32.dll dlls/ntoskrnl.exe/x86_64-windows/ntoskrnl.exe programs/lsass/x86_64-windows/lsass.exe programs/wineboot/x86_64-windows/wineboot.exe server/wineserver"
+ENGINE_BUILD="$BUILD_DIR/wine-build-engine"  # out-of-tree full i386+x86_64 build
+ENGINE_ROOT="$BUILD_DIR/wine-engine-root"    # installed tree: bin/ lib/wine/ share/wine/
+MACPORTS="${MACPORTS:-/opt/local}"
 BREW="$(command -v brew || echo /opt/homebrew/bin/brew)"
-export MACOSX_DEPLOYMENT_TARGET=10.15
+# Engine mode matches Gcenx's wine Portfiles (14.0 on macOS 15+ hosts, wine MR 5935).
+case "${1:-}" in engine*) export MACOSX_DEPLOYMENT_TARGET=14.0 ;; *) export MACOSX_DEPLOYMENT_TARGET=10.15 ;; esac
 
 log(){ printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 use_bison(){ export PATH="$("$BREW" --prefix bison)/bin:$PATH"; }  # Wine needs bison >= 3.0; macOS ships 2.3
@@ -60,11 +73,20 @@ cmd_fetch() {
 }
 
 cmd_apply() {
-  log "Applying patches (em-backports -> misc -> ace-core -> macOS)"
+  local mode="${1:-}"
+  log "Applying patches (${mode:+highball -> }em-backports -> misc -> ace-core -> macOS${mode:+ -> sikarugir})"
   [ -d "$WINE_SRC/.git" ] || { echo "run 'fetch' first"; exit 1; }
   local P="$REPO/patches"
   ( cd "$WINE_SRC"
     n=0
+    # The Sikarugir engine starts from Highball's CrossOver 26.3 series, applied the way its own
+    # build applies it (patch -p1; several hunks need fuzz against this source).
+    if [ "$mode" = engine ]; then
+      for f in $(ls "$P"/highball/*.patch | sort); do
+        patch -p1 -s --no-backup-if-mismatch < "$f" || { echo "patch failed: $f"; exit 1; }
+        n=$((n+1))
+      done
+    fi
     for f in $(ls "$P"/stage2-dwproton/em-backports/*.patch | sort) \
              $(ls "$P"/stage2-dwproton/misc/*.patch | sort) \
              $(ls "$P"/stage2-dwproton/ace-core/*.patch | sort) \
@@ -72,6 +94,14 @@ cmd_apply() {
       git apply "$f" || { echo "patch failed: $f"; exit 1; }
       n=$((n+1))
     done
+    # Fixes only the Sikarugir engine needs (its launcher's environment); the CrossOver build
+    # leaves them out.
+    if [ "$mode" = engine ]; then
+      for f in $(ls "$P"/sikarugir/*.patch | sort); do
+        git apply "$f" || { echo "patch failed: $f"; exit 1; }
+        n=$((n+1))
+      done
+    fi
     echo "applied $n patches" ) || exit 1
 }
 
@@ -112,8 +142,87 @@ cmd_build() {
   echo "built $WINE_OUT"
 }
 
+# --- full engine (Sikarugir) ---------------------------------------------------------------------
+# Unlike the minimal build above, this builds the whole tree (i386 + x86_64 PE via mingw-w64 GCC, new
+# WoW64 — still no cx-llvm) with the optional libraries enabled, against an x86_64 MacPorts. Wine
+# dlopens those libraries by install name at runtime; a Sikarugir wrapper supplies them from its
+# Contents/Frameworks, so nothing from /opt/local ends up in the engine.
+
+# winebuild looks up the mingw binutils (x86_64-w64-mingw32-dlltool, ...) on PATH; the mingw-w64
+# GCC ports install them in $MACPORTS/bin.
+use_macports(){
+  export PATH="$MACPORTS/bin:$MACPORTS/sbin:$PATH" PKG_CONFIG_PATH="$MACPORTS/lib/pkgconfig"
+}
+
+check_macports() {
+  local p missing=""
+  [ -x "$MACPORTS/bin/port" ] || { echo "MacPorts not found at $MACPORTS"; exit 1; }
+  grep -qE '^build_arch[[:space:]]+x86_64' "$MACPORTS/etc/macports/macports.conf" \
+    || { echo "MacPorts must be configured with 'build_arch x86_64' (see docs/sikarugir.md)"; exit 1; }
+  # After a major macOS upgrade `port` refuses to run until `sudo port migrate`, although the
+  # installed tools and libraries still work. MACPORTS_SKIP_PORT_CHECK=1 checks their files instead.
+  if [ "${MACPORTS_SKIP_PORT_CHECK:-0}" = 1 ]; then
+    for p in bin/bison bin/flex bin/msgfmt bin/pkg-config bin/x86_64-w64-mingw32-gcc bin/i686-w64-mingw32-gcc \
+             lib/libgnutls.30.dylib lib/libfreetype.6.dylib lib/libSDL2-2.0.0.dylib lib/libvulkan.1.dylib lib/libpcap.A.dylib; do
+      [ -e "$MACPORTS/$p" ] || missing="$missing $p"
+    done
+    [ -z "$missing" ] || { echo "missing MacPorts files:$missing"; exit 1; }
+    echo "warning: not asking 'port' (MACPORTS_SKIP_PORT_CHECK=1); the needed files are present"
+    return
+  fi
+  for p in bison flex gettext pkgconfig x86_64-w64-mingw32-gcc i686-w64-mingw32-gcc gnutls freetype libsdl2 vulkan-loader libpcap; do
+    "$MACPORTS/bin/port" -q installed "$p" 2>/dev/null | grep -q active || missing="$missing $p"
+  done
+  [ -z "$missing" ] || { echo "missing MacPorts ports:$missing (after a macOS upgrade: 'sudo port migrate', or MACPORTS_SKIP_PORT_CHECK=1)"; exit 1; }
+}
+
+cmd_engine_configure() {
+  log "Configuring the full i386+x86_64 Wine against MacPorts ($MACPORTS)"
+  [ -d "$WINE_SRC" ] || { echo "run 'fetch' first"; exit 1; }
+  check_macports; use_macports
+  rm -rf "$ENGINE_BUILD"; mkdir -p "$ENGINE_BUILD"
+  # Options follow Gcenx's wine-devel Portfile (the recipe behind Sikarugir's engines), adjusted to
+  # Highball's build, whose engine Steam connects on: PE modules from mingw-w64 GCC rather than
+  # llvm-mingw, no libinotify (the server then watches directories with kqueue) and no CUPS.
+  # Installed under the prefix /wswine.bundle so DESTDIR=$ENGINE_ROOT yields the engine layout directly.
+  ( cd "$ENGINE_BUILD" && CC="clang -arch x86_64" CXX="clang++ -arch x86_64" OBJC="clang -arch x86_64" \
+      CPPFLAGS="-I$MACPORTS/include" LDFLAGS="-L$MACPORTS/lib" CROSSCFLAGS="-O2" "$WINE_SRC/configure" \
+      --prefix=/wswine.bundle \
+      --build=x86_64-apple-darwin --host=x86_64-apple-darwin --enable-archs=i386,x86_64 \
+      --with-mingw x86_64_CC=x86_64-w64-mingw32-gcc i386_CC=i686-w64-mingw32-gcc \
+      --disable-tests --disable-winebth_sys \
+      --with-coreaudio --with-freetype --with-gettext --with-gnutls \
+      --with-opencl --with-pcap --with-pcsclite --with-pthread --with-sdl --with-vulkan \
+      --without-alsa --without-capi --without-cups --without-dbus --without-ffmpeg --without-fontconfig \
+      --without-gettextpo --without-gphoto --without-gssapi --without-gstreamer --without-inotify --without-krb5 \
+      --without-netapi --without-opengl --without-oss --without-pulse --without-sane --without-udev \
+      --without-usb --without-v4l2 --without-wayland --without-x
+  ) 2>&1 | tee "$BUILD_DIR/engine-configure.log"
+  [ "${PIPESTATUS[0]}" = 0 ] || { echo "configure failed — see $BUILD_DIR/engine-configure.log"; exit 1; }
+}
+
+cmd_engine_build() {
+  log "Building the full engine tree (make -j$JOBS)"
+  [ -f "$ENGINE_BUILD/Makefile" ] || { echo "run 'engine-configure' first"; exit 1; }
+  use_macports
+  ( cd "$ENGINE_BUILD" && make -j"$JOBS" ) 2>&1 | tee "$BUILD_DIR/engine-build.log"
+  [ "${PIPESTATUS[0]}" = 0 ] || { echo "make failed — see $BUILD_DIR/engine-build.log"; exit 1; }
+  log "Installing into $ENGINE_ROOT"
+  rm -rf "$ENGINE_ROOT"
+  ( cd "$ENGINE_BUILD" && make install-lib DESTDIR="$ENGINE_ROOT" ) > "$BUILD_DIR/engine-install.log" 2>&1 \
+    || { echo "install failed — see $BUILD_DIR/engine-install.log"; exit 1; }
+  cp "$WINE_SRC/COPYING.LIB" "$ENGINE_ROOT/wswine.bundle/" || exit 1
+  echo "$CX_VER" > "$ENGINE_ROOT/CROSSOVER_VERSION"
+  echo "$SRC_URL" > "$ENGINE_ROOT/SOURCE_URL"
+  echo "installed $ENGINE_ROOT/wswine.bundle"
+}
+
 case "${1:-all}" in
   deps|fetch|apply|configure|build) "cmd_$1" ;;
   all) cmd_deps; cmd_fetch; cmd_apply; cmd_configure; cmd_build ;;
-  *) echo "usage: $0 [all|deps|fetch|apply|configure|build]"; exit 1 ;;
+  engine-configure) cmd_engine_configure ;;
+  engine-build) cmd_engine_build ;;
+  engine-apply) cmd_apply engine ;;
+  engine) cmd_fetch; cmd_apply engine; cmd_engine_configure; cmd_engine_build ;;
+  *) echo "usage: $0 [all|deps|fetch|apply|configure|build|engine|engine-apply|engine-configure|engine-build]"; exit 1 ;;
 esac

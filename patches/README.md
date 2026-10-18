@@ -29,6 +29,25 @@ Original to this project. The two Rosetta fixes live in `dlls/ntdll/unix/signal_
 - `0007-ntdll-replace-stale-ntdll-symlink-in-winetemp-dir.patch`, in `dlls/ntdll/unix/loader.c`:
   - CW HACK 22144 re-execs each process through a link to the loader in `$TMPDIR/winetemp-<loader inode>-…/`, next to an `ntdll.so` symlink. The folder is keyed on the loader's inode, which survives renaming or moving the app, but the symlink was only created once, so after a rename every process fails with `could not load ntdll.so`. The symlink is now replaced atomically each time.
 
+## `sikarugir/` — fixes only the Sikarugir engine needs
+
+Applied by `scripts/build-wine.sh engine` after everything else; the CrossOver build (`apply`) leaves them out. Both deal with the environment Sikarugir's launcher sets up.
+
+- `0001-ntdll-search-sikarugir-renderer-dll-paths-first.patch`, in `dlls/ntdll/unix/loader.c`:
+  - Sikarugir's launcher selects a renderer by pointing `WINEDLLPATH_DXMT` / `_D3DMETAL` / `_DXVK` / `_D9VK` / `_CNCD` (Sikarugir's own engines) or `WINEDLLPATH_PREPEND` (Gcenx's CrossOver-based engines; handled by `highball/0003`, which the engine build applies) at its DLL folder. CrossOver itself does this through `cxcompatdb`, so stock CrossOver Wine ignores those variables and falls back to `wined3d`. Each folder is now passed to CrossOver's existing `prepend_dll_path()` (CW Hack 24067). Without it, Steam's web helper crashes its GPU process on `wined3d` and never opens a window. No effect when the variables are unset (i.e. under CrossOver).
+
+- `0002-ntdll-ignore-host-qmlscene-device.patch`, in `dlls/ntdll/unix/env.c`:
+  - Sikarugir's launcher exports `QMLSCENE_DEVICE=softwarecontext` to every wrapper. On this engine that leaves a Windows Qt WebEngine window, the Gryphline launcher's, blank white (the page loads and is clickable but never paints). Wine already keeps host Qt settings (`QT_*`) out of Windows programs; `QMLSCENE_DEVICE` is added to that list. `WINEQMLSCENE_DEVICE=…` still passes it through deliberately.
+
+## `highball/` — Highball's CrossOver 26.3 series (Sikarugir engine only)
+
+22 of the 23 patches of [Highball](https://github.com/gauthierpiarrette/highball-engine) at commit `5d6bbe0c83f4592a8798abba48cc7e8f58feb492` (the series behind its r27 engine), **unmodified** (LGPL-2.1). `0014-msync-unregister-early-return` is left out: it fixes a wineserver leak from the client side, which this repo fixes on the server side instead (`stage1-macos/0006`; see [../docs/sikarugir.md](../docs/sikarugir.md)). `scripts/build-wine.sh engine` applies them first, with `patch -p1` as Highball's own build does (several hunks need fuzz), then everything below; the CrossOver build (`apply`) does not use them. Descriptions are in each patch. The ones this engine depends on:
+
+- `0001-use-the-real-user-name` — reverts CrossOver Hack 12735 (user `crossover`); Steam needs it to find its saved login (`local.vdf` lives in the profile).
+- `0003-ntdll-winedllpath-prepend` — honours `WINEDLLPATH_PREPEND` (see `sikarugir/0001` for Sikarugir's other renderer variables).
+- `0007-winemac-cross-process-child-swapchains` — Wine bug 60263: a Chromium GPU process (Steam's `steamwebhelper`) presents into a window owned by its browser process; the rendering process now draws into a `CAMetalLayer` exported through a `CAContext` and hosted by a `CALayerHost`. DXMT only does this with `DXMT_ALLOW_CROSS_PROCESS_SWAPCHAIN=1`, which Sikarugir's launcher sets when the engine carries the `dxmt_extescape` marker. Without it Steam's window is black or missing.
+- `0009`, `0011`, `0013`, `0016` — `%gs` slot and DEP handling under Rosetta. They touch the same code as `stage1-macos/0001`; ACE passed with them (2026-10-16).
+
 ## `stage2-dwproton/` — the ported dw-proton anti-cheat patches
 
 The Endfield-relevant subset of dw-proton's fix commit `b816be489`, from the `dawn-winery/dwproton-mirror` (fetched by [`../scripts/fetch-dwproton-patches.sh`](../scripts/fetch-dwproton-patches.sh)). Analysis: [../docs/02-dwproton-ace-patches.md](../docs/02-dwproton-ace-patches.md).
@@ -76,11 +95,11 @@ Applied by `scripts/build-moltenvk.sh` to MoltenVK v1.4.2 and its pinned SPIRV-C
 Known residual: ACE also called `ntoskrnl.exe.PsGetProcessExitStatus`, which dw-proton's maintainer found "not really related"; one background ACE thread used to abort on it. It is now implemented by `ace-core/0006`, so that abort is gone.
 
 ## Applying
-All 31 patches are unified diffs and apply cleanly with `git apply` in this order: `em-backports/*` (numeric) → `misc/*` (numeric) → `ace-core/*` (numeric) → `stage1-macos/*` (numeric). This is automated by [`../scripts/build-wine.sh apply`](../scripts/build-wine.sh). Expect to rebase if CrossOver's Wine base changes (the dw-proton set targets the `b816be489` snapshot; the latest lives baked into `dawn.wine/dawn-winery/wine-dwproton` branch `base`).
+The 46 patches outside `highball/` and `sikarugir/` are unified diffs and apply cleanly with `git apply` in this order: `em-backports/*` (numeric) → `misc/*` (numeric) → `ace-core/*` (numeric) → `stage1-macos/*` (numeric). This is automated by [`../scripts/build-wine.sh apply`](../scripts/build-wine.sh). The Sikarugir engine (`engine-apply`) applies `highball/*` (numeric, `patch -p1`) before them and `sikarugir/*` (numeric) after them: 70 in all, verified against a fresh CrossOver 26.3 tree. Expect to rebase if CrossOver's Wine base changes (the dw-proton set targets the `b816be489` snapshot; the latest lives baked into `dawn.wine/dawn-winery/wine-dwproton` branch `base`).
 
 ## License / provenance
 
-These patches modify **Wine** (https://www.winehq.org/), which is **LGPL-2.1-or-later**. As derivative works of LGPL code, **all patches here are LGPL-2.1-or-later** — the project's top-level MIT license (which covers `scripts/` and `docs/`) does **not** apply to this directory.
+These patches modify **Wine** (https://www.winehq.org/), which is **LGPL-2.1-or-later**. As derivative works of LGPL code, **all patches here are LGPL-2.1-or-later** — the project's top-level MIT license (which covers `scripts/` and `docs/`) does **not** apply to this directory. Exception: `highball/*` is imported from Highball under **LGPL-2.1** as its upstream licenses it (no "or later" grant); that is compatible with Wine's LGPL-2.1-or-later.
 
 [Wine](https://www.winehq.org/) patches are licensed LGPL-2.1-or-later; `moltenvk/` patches, Apache-2.0 like MoltenVK and SPIRV-Cross. `stage2-dwproton/*` retain upstream authorship (Etaash Mathamsetty, Ziia Shi / mkrsym1, NelloKudo and other dw-proton contributors).
 
