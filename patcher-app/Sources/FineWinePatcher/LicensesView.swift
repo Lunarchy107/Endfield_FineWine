@@ -64,6 +64,21 @@ struct LicenseComponent: Identifiable, Hashable {
                 LicenseLink(label: "dw-proton / Dawn Winery", url: "https://dawn.wine/"),
             ]
         ),
+        LicenseComponent(
+            id: "sikarugir-engine",
+            name: "Sikarugir engine (experimental)",
+            license: "LGPL-2.1-or-later",
+            summary: "Not bundled: the Sikarugir Engine window installs a WS12WineFineWine engine you download from the release. It is a complete CrossOver 26.3 Wine built with this project's patches plus Highball's CrossOver 26.3 series, and carries WineHQ's Wine Gecko and Wine Mono unmodified.",
+            notice: "Highball patches — Copyright © the Highball authors, LGPL-2.1. Wine Gecko (Mozilla Public License 2.0) and Wine Mono (several licenses across its components, among them MIT X11, LGPL and GPL; see its COPYING file) are WineHQ's releases, unmodified. The engine's SOURCE.txt names the exact source it was built from.",
+            textFile: "lgpl-2.1.txt",
+            links: [
+                LicenseLink(label: "Complete corresponding source (patches + build scripts)", url: "https://github.com/stoicswe/Endfield_FineWine"),
+                LicenseLink(label: "Highball engine patches", url: "https://github.com/gauthierpiarrette/highball-engine"),
+                LicenseLink(label: "Wine Gecko", url: "https://gitlab.winehq.org/wine/wine/-/wikis/Gecko"),
+                LicenseLink(label: "Wine Mono", url: "https://gitlab.winehq.org/wine-mono/wine-mono"),
+                LicenseLink(label: "Sikarugir", url: "https://github.com/Sikarugir-App/Sikarugir"),
+            ]
+        ),
     ]
 }
 

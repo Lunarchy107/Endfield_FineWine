@@ -21,6 +21,12 @@ struct FineWinePatcherApp: App {
                 .environmentObject(engine)
         }
         .windowResizability(.contentSize)
+
+        // Sikarugir (no-CrossOver) support: experimental and kept apart from the CrossOver flow.
+        Window("Sikarugir Engine", id: "sikarugir-engine") {
+            SikarugirEngineView()
+        }
+        .windowResizability(.contentSize)
     }
 }
 
@@ -33,6 +39,10 @@ struct PatcherCommands: Commands {
         CommandMenu("Tools") {
             Button("Mod Framework (EFMI)…") {
                 openWindow(id: "mod-framework")
+            }
+            Divider()
+            Button("Sikarugir Engine…") {
+                openWindow(id: "sikarugir-engine")
             }
         }
     }

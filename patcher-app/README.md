@@ -111,9 +111,33 @@ Endfield via XXMI and check `d3d11_log.txt` for *"Proxy loading active, Forcing
 load_library_redirect=0"*. Note that XXMI rewrites `d3dx.ini` when it updates EFMI
 (`overwrite_ini=True`), so re-run the phase (or disable that option in XXMI) after an update.
 
+## Sikarugir engine (experimental) — Tools → Sikarugir Engine…
+
+For playing without CrossOver, in a [Sikarugir](https://github.com/Sikarugir-App/Sikarugir) wrapper.
+Community-maintained and kept apart from the CrossOver flow: its own window
+([`SikarugirEngineView.swift`](Sources/FineWinePatcher/SikarugirEngineView.swift)) and logic
+([`Sikarugir.swift`](Sources/FineWinePatcher/Sikarugir.swift)); the main window and
+`PatcherEngine` don't know about it. Setup, build and wrapper settings:
+[docs/sikarugir.md](../docs/sikarugir.md).
+
+* **Install the engine.** The engine (`WS12WineFineWine<version>_<n>.tar.xz`, a complete Wine built
+  by `scripts/build-wine.sh engine` + `scripts/package-sikarugir-engine.sh`) is *not* bundled; it's
+  attached to the release. The window finds it in `~/Downloads` (or **Choose…**), checks it against
+  the name and SHA-256 that `build-app.sh` baked into the app, and copies it into
+  `~/Library/Application Support/Sikarugir/Engines`, asking before replacing one. A wrapper then
+  uses it after **Change Engine** in its Configure (or when made with Creator).
+* **Check a wrapper**, read-only. For a wrapper in `~/Applications/Sikarugir` (or **Choose
+  Wrapper…**): that it runs this engine, that the renderers its settings select are present, that
+  the libraries the engine loads from its `Contents/Frameworks` are there, whether Creator holds a
+  newer template, MSync, and how the game is launched (`-silent -applaunch 4732690 -force-d3d11`
+  for the Steam version). Each problem comes with the fix to apply in Sikarugir. The app never
+  writes inside a wrapper: Creator and Configure (**Update Wrapper**, **Change Engine**) own that.
+
 ## Building the app
 
-Requires the Xcode Command Line Tools only (no Xcode):
+Requires the Xcode Command Line Tools only (no Xcode). With the macOS 27 SDK, SwiftUI's `@State` is a
+macro whose plugin ships only with Xcode; with the Command Line Tools alone, build against an
+older SDK they still include, e.g. `SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk`:
 
 ```bash
 # 1. Build the patched Wine first (once) — produces build/wine-build64
@@ -131,7 +155,10 @@ open "patcher-app/build/FineWine Patcher.app"
 a flat directory with the three files); `MOLTENVK_DIR` overrides where `libMoltenVK.dylib` comes
 from (default `build/moltenvk-out`, or a copy inside `PAYLOAD_DIR`). `CODESIGN_ID` sets a real
 signing identity (default: ad-hoc). `ALLOW_MISSING_PAYLOAD=1` produces a payload-less smoke-test
-build that refuses to patch.
+build that refuses to patch. `SIKARUGIR_ENGINE` names the Sikarugir engine the app accepts (its `.tar.xz` or
+`.tar.xz.sha256`; default: the newest `dist/WS12WineFineWine*.tar.xz.sha256`); without one the
+Sikarugir Engine window can't verify engines, so it won't install them. For `swift run`,
+`FINEWINE_SIKARUGIR_ENGINE_SHA256` (and optionally `FINEWINE_SIKARUGIR_ENGINE_NAME`) do the same.
 
 ### App icon
 
@@ -174,7 +201,7 @@ game. It requires the user's own licensed CrossOver install as input, and links 
 ```
 Package.swift                     SwiftPM manifest (macOS 13+)
 Sources/FineWinePatcher/
-  FineWinePatcherApp.swift        app entry: main window + Tools menu + the Mod Framework window
+  FineWinePatcherApp.swift        app entry: main window + Tools menu + the Mod Framework and Sikarugir Engine windows
   ContentView.swift               the main window UI (the patch flow only)
   ModChainView.swift              the Mod Framework window: bottle + EFMI discovery, apply/revert chain
   PatchProgressViews.swift        the shared step-checklist and error views
@@ -182,6 +209,9 @@ Sources/FineWinePatcher/
   ModChain.swift                  the mod (EFMI) chain support: backend/bottle/EFMI discovery,
                                   the d3dx.ini [System] proxy_d3d11 edit, verify, revert, state file
   LicensesView.swift              the Licenses window + component metadata
+  Sikarugir.swift                 Sikarugir support (experimental): engine file + checksum, install into
+                                  Sikarugir's Engines folder, read-only wrapper check
+  SikarugirEngineView.swift       the Sikarugir Engine window (Tools → Sikarugir Engine…)
 Tests/FineWinePatcherTests/
   ModChainTests.swift             the mod-chain ini-editing rules (swift test)
 Resources/licenses/               license texts bundled into the app

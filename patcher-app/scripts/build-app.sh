@@ -19,6 +19,11 @@
 #                           Application: …" identity for notarizable builds)
 #   ALLOW_MISSING_PAYLOAD=1 build without payload (smoke-test builds only — the app will
 #                           refuse to patch, and says so in its UI)
+#   SIKARUGIR_ENGINE        the Sikarugir engine this app's Sikarugir Engine window accepts: its
+#                           .tar.xz or the .tar.xz.sha256 next to it (default: the newest
+#                           <repo>/dist/WS12WineFineWine*.tar.xz.sha256, from
+#                           scripts/package-sikarugir-engine.sh). Its name and SHA-256 go into
+#                           Info.plist; without one the window can't verify, so it won't install.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"          # patcher-app/
@@ -123,6 +128,22 @@ $ICON_PLIST
 PLIST
 plutil -lint -s "$APP/Contents/Info.plist"
 ok "bundle skeleton + Info.plist"
+
+# The Sikarugir engine (experimental) isn't bundled; the app only records which one it accepts.
+SIKARUGIR_ENGINE="${SIKARUGIR_ENGINE:-$(ls -t "$REPO"/dist/WS12WineFineWine*.tar.xz.sha256 2>/dev/null | head -n1 || true)}"
+if [ -n "$SIKARUGIR_ENGINE" ] && [ -f "$SIKARUGIR_ENGINE" ]; then
+  case "$SIKARUGIR_ENGINE" in
+    *.sha256) read -r engine_sum engine_file < "$SIKARUGIR_ENGINE" ;;
+    *)        engine_sum="$(shasum -a 256 "$SIKARUGIR_ENGINE" | awk '{print $1}')"; engine_file="$SIKARUGIR_ENGINE" ;;
+  esac
+  engine_name="$(basename "$engine_file" .tar.xz)"
+  [[ "$engine_sum" =~ ^[0-9a-f]{64}$ ]] || { echo "ERROR: no SHA-256 in $SIKARUGIR_ENGINE"; exit 1; }
+  plutil -insert FineWineSikarugirEngineName -string "$engine_name" "$APP/Contents/Info.plist"
+  plutil -insert FineWineSikarugirEngineSHA256 -string "$engine_sum" "$APP/Contents/Info.plist"
+  ok "Sikarugir engine: $engine_name (${engine_sum:0:12}…)"
+else
+  warn "no Sikarugir engine checksum (set SIKARUGIR_ENGINE) — the Sikarugir Engine window won't install engines"
+fi
 
 # ---------------------------------------------------------------- 3. payload
 log "Staging the pre-built Wine modules (payload) from $PAYLOAD_DIR and MoltenVK from $MOLTENVK_DIR"
